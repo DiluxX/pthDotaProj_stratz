@@ -1,23 +1,20 @@
 from kivymd.uix.screen import MDScreen
-from kivymd.uix.snackbar import Snackbar
 from config import store
+
 
 class SettingsScreen(MDScreen):
     def on_pre_enter(self):
-        """Вызывается прямо перед открытием экрана: загружаем ключ из памяти"""
-        try:
-            saved_key = store.get('app_settings')['api_key']
-            self.ids.api_key_input.text = saved_key
-        except KeyError:
-            self.ids.api_key_input.text = ""
+        """Вызывается прямо перед открытием экрана: загружаем ключи из памяти"""
+        data = store.get('app_settings') if store.exists('app_settings') else {}
+        self.ids.steam_key_input.text = data.get('api_key', "")
+        self.ids.stratz_key_input.text = data.get('stratz_api_key', "")
 
     def save_settings(self):
-        # Твой текущий код сохранения ключа в store (оставляем как есть)
-        api_key = self.ids.api_key_input.text.strip()
-        from config import store
-        store.put('app_settings', api_key=api_key)
-        
-        # Вместо капризного Snackbar вызываем железобетонный MDDialog
+        steam_key = self.ids.steam_key_input.text.strip()
+        stratz_key = self.ids.stratz_key_input.text.strip()
+
+        store.put('app_settings', api_key=steam_key, stratz_api_key=stratz_key)
+
         from kivymd.uix.dialog import MDDialog
         from kivymd.uix.button import MDFlatButton
 
@@ -28,15 +25,13 @@ class SettingsScreen(MDScreen):
                 MDFlatButton(
                     text="ОК",
                     theme_text_color="Custom",
-                    text_color=(0.22, 0.28, 0.17, 1), # Наш фирменный оливковый
-                    on_release=lambda x: self.dialog.dismiss()
+                    text_color=(0.22, 0.28, 0.17, 1),
+                    on_release=lambda x: self.dialog.dismiss(),
                 )
             ],
         )
         self.dialog.open()
-        
+
     def go_back(self):
         self.manager.transition.direction = "right"
         self.manager.current = "search"
-        
-        """9883415E836E9431360FC67950FA60B5"""

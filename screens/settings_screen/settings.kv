@@ -1,6 +1,6 @@
 <SettingsScreen>:
     name: "settings"
-    
+
     MDBoxLayout:
         orientation: 'vertical'
         md_bg_color: 0.12, 0.12, 0.12, 1
@@ -14,23 +14,41 @@
         MDBoxLayout:
             orientation: 'vertical'
             padding: "20dp"
-            spacing: "20dp"
+            spacing: "15dp"
 
             MDLabel:
-                text: "Конфигурация OpenDota API"
+                text: "Steam Web API"
                 font_style: "H6"
                 theme_text_color: "Custom"
                 text_color: 1, 1, 1, 1
 
             MDLabel:
-                text: "Если у вас есть персональный API-токен (JWT) от OpenDota/Stratz, введите его ниже, чтобы расширить лимиты запросов."
+                text: "Нужен для загрузки профиля, если STRATZ недоступен. Получить: steamcommunity.com/dev/apikey"
                 font_style: "Body2"
                 theme_text_color: "Custom"
                 text_color: 0.6, 0.6, 0.6, 1
 
             MDTextField:
-                id: api_key_input
-                hint_text: "API Ключ / Токен"
+                id: steam_key_input
+                hint_text: "Steam API Key"
+                mode: "rectangle"
+                text_color_normal: 1, 1, 1, 1
+
+            MDLabel:
+                text: "STRATZ API"
+                font_style: "H6"
+                theme_text_color: "Custom"
+                text_color: 1, 1, 1, 1
+
+            MDLabel:
+                text: "Bearer-токен для свежих данных, ранга и винрейта. Получить: stratz.com -> Settings -> API"
+                font_style: "Body2"
+                theme_text_color: "Custom"
+                text_color: 0.6, 0.6, 0.6, 1
+
+            MDTextField:
+                id: stratz_key_input
+                hint_text: "STRATZ API Key"
                 mode: "rectangle"
                 text_color_normal: 1, 1, 1, 1
 

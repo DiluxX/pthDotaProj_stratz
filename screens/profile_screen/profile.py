@@ -1,9 +1,8 @@
 import threading
 from kivy.clock import Clock
 from kivymd.uix.screen import MDScreen
-from core.api_client import get_player_profile_from_valve
-# (Если папка называется "core", то оставь: from core.api_client import get_player_profile_from_valve)
-# (если ты переименовал папку в services, то пиши: from services.api_client import ...)
+from core.api_client import get_player_profile
+
 
 class ProfileScreen(MDScreen):
     def go_back(self):
@@ -17,17 +16,14 @@ class ProfileScreen(MDScreen):
         self.ids.matches_label.text = "Всего матчей: загрузка..."
         self.ids.winrate_text_label.text = "Винрейт: вычисляется..."
         self.ids.winrate_progress.value = 0
-        
-        # Запускаем один поток, который соберет все данные
+        self.ids.top_hero_label.text = "Лучший герой: —"
+
         threading.Thread(target=self._network_load, args=(account_id,), daemon=True).start()
 
     def _network_load(self, account_id):
         try:
-            # Импортируем нашу новую функцию работы с Valve
-            from core.api_client import get_player_profile_from_valve
-            valve_data = get_player_profile_from_valve(account_id)
-            
-            Clock.schedule_once(lambda dt: self._ui_render_profile(valve_data), 0)
+            data = get_player_profile(account_id)
+            Clock.schedule_once(lambda dt: self._ui_render_profile(data), 0)
         except Exception as err:
             error_text = str(err)
             Clock.schedule_once(lambda dt: self._ui_handle_error(error_text), 0)
@@ -36,19 +32,28 @@ class ProfileScreen(MDScreen):
         if not data:
             self.ids.name_label.text = "Ошибка загрузки"
             return
-            
-        # Устанавливаем имя и статус истории матчей
+
         self.ids.name_label.text = data.get("name", "Неизвестный")
         self.ids.matches_label.text = data.get("matches_text", "Нет данных")
-        
-        # Так как Valve API не отдает ранг-медаль напрямую (это фишка исключительно внутриигровая),
-        # мы временно ставим статус аккаунта официального API
-        self.ids.rank_label.text = "Статус: Подключен к Steam Web API"
-        
-        # Скрываем полосу винрейта, так как Valve не считает его в один клик (нужно парсить каждый матч)
-        self.ids.winrate_text_label.text = "Анализ матчей активен"
-        self.ids.winrate_progress.value = 100
-        
+
+        source = data.get("source")
+        if source == "stratz":
+            self.ids.rank_label.text = "Источник: STRATZ (свежие данные)"
+        else:
+            self.ids.rank_label.text = "Источник: Steam Web API"
+
+        if "winrate" in data:
+            winrate = data["winrate"]
+            self.ids.winrate_text_label.text = f"Винрейт: {winrate}%"
+            self.ids.winrate_progress.value = winrate
+        else:
+            # Valve API не отдаёт готовый винрейт - его пришлось бы считать
+            # по каждому матчу отдельно, что уже сделано в STRATZ-ветке.
+            self.ids.winrate_text_label.text = "Винрейт: недоступен без STRATZ ключа"
+            self.ids.winrate_progress.value = 0
+
+        self.ids.top_hero_label.text = "Лучший герой: доступно только через STRATZ"
+
     def _ui_handle_error(self, error_msg="Неизвестная ошибка"):
         from kivymd.uix.dialog import MDDialog
         from kivymd.uix.button import MDFlatButton
@@ -61,7 +66,7 @@ class ProfileScreen(MDScreen):
                     text="ОК",
                     theme_text_color="Custom",
                     text_color=(0.22, 0.28, 0.17, 1),
-                    on_release=lambda x: self.dialog.dismiss()
+                    on_release=lambda x: self.dialog.dismiss(),
                 )
             ],
         )
