@@ -1,0 +1,44 @@
+<SearchScreen>:
+    name: "search"
+    
+    MDBoxLayout:
+        orientation: 'vertical'
+        md_bg_color: 0.12, 0.12, 0.12, 1
+
+        MDTopAppBar:
+            title: "Поиск игроков"
+            elevation: 4
+            md_bg_color: 0.22, 0.28, 0.17, 1
+            right_action_items: [["cog", lambda x: root.open_settings()]]
+
+        MDBoxLayout:
+            orientation: 'vertical'
+            padding: "20dp"
+            spacing: "15dp"
+
+            MDTextField:
+                id: search_input
+                hint_text: "Введите никнейм игрока"
+                mode: "rectangle"
+                text_color_normal: 1, 1, 1, 1
+
+            MDRaisedButton:
+                text: "НАЙТИ ИГРОКА"
+                pos_hint: {"center_x": .5}
+                md_bg_color: 0.22, 0.28, 0.17, 1
+                on_release: root.start_search()
+
+            MDAnchorLayout:
+                size_hint_y: None
+                height: "40dp"
+                MDSpinner:
+                    id: loading_spinner
+                    size_hint: None, None
+                    size: "30dp", "30dp"
+                    active: False
+
+            ScrollView:
+                MDList:
+                    id: results_list
+                    spacing: "10dp"
+                    padding: "10dp"

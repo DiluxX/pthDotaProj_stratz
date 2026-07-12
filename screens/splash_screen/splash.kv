@@ -1,0 +1,40 @@
+<SplashScreen>:
+    name: "splash"
+    md_bg_color: 0.1, 0.1, 0.1, 1
+
+    MDBoxLayout:
+        orientation: 'vertical'
+        padding: "20dp"
+        spacing: "20dp"
+        alignment: "center"
+        pos_hint: {"center_x": 0.5, "center_y": 0.5}
+
+        Widget:
+            size_hint_y: 0.3
+
+        MDLabel:
+            text: "DOTA 2 STATS"
+            font_style: "H3"
+            theme_text_color: "Custom"
+            text_color: 0.22, 0.28, 0.17, 1
+            halign: "center"
+            bold: True
+
+        MDLabel:
+            text: "Мобильный аналитик"
+            font_style: "Subtitle1"
+            theme_text_color: "Custom"
+            text_color: 0.6, 0.6, 0.6, 1
+            halign: "center"
+
+        MDAnchorLayout:
+            size_hint_y: None
+            height: "100dp"
+            MDSpinner:
+                size_hint: None, None
+                size: "48dp", "48dp"
+                active: True
+                palette: [[0.22, 0.28, 0.17, 1]]
+
+        Widget:
+            size_hint_y: 0.3

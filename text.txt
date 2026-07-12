@@ -1,0 +1,187 @@
+import httpx
+from bs4 import BeautifulSoup
+from config import store
+
+def get_steam_api_key():
+    """Достает сохраненный пользователем ключ из локального JsonStore"""
+    try:
+        return store.get('app_settings')['api_key'].strip()
+    except KeyError:
+        return ""
+
+def search_players_by_name(name: str) -> list:
+    """
+    Ищет игроков по нику через внутренний шлюз Steam,
+    предварительно авторизуя гостевую сессию для обхода 302 редиректа.
+    """
+    if not name.strip():
+        return []
+
+    base_url = "https://steamcommunity.com/"
+    search_ajax_url = "https://steamcommunity.com/actions/SearchCommunity"
+    
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Accept": "application/json, text/javascript, */*; q=0.01",
+        "X-Requested-With": "XMLHttpRequest",
+        "Referer": "https://steamcommunity.com/search/users/"
+    }
+
+    try:
+        # Создаем сессионный клиент, который будет автоматически копить и слать куки
+        with httpx.Client(headers=headers, timeout=10.0, follow_redirects=True) as client:
+            
+            # Шаг 1: Заходим на главную страницу Steam, чтобы получить куки сессии
+            init_response = client.get(base_url)
+            
+            # Шаг 2: Вытаскиваем sessionid, который Стим сгенерировал для нашего клиента
+            steam_session_id = client.cookies.get("sessionid", "")
+            
+            # Формируем параметры поиска, обязательно передавая полученный sessionid
+            query_params = {
+                "text": name.strip(),
+                "type": "players",
+                "sessionid": steam_session_id
+            }
+
+            # Шаг 3: Делаем AJAX запрос к поиску. Теперь Стим примет нас за своего!
+            response = client.get(search_ajax_url, params=query_params)
+            
+            if response.status_code != 200:
+                print(f"[DEBUG] Поисковый шлюз вернул ошибку: {response.status_code}")
+                return []
+                
+            data = response.json()
+            html_content = data.get("html", "")
+            
+            if not html_content:
+                print("[DEBUG] Стим вернул пустой блок результатов (html пуст).")
+                return []
+                
+            soup = BeautifulSoup(html_content, 'html.parser')
+            search_rows = soup.find_all("div", {"class": "search_row"})
+            
+            players_list = []
+            for row in search_rows[:10]:
+                try:
+                    name_box = row.find("a", {"class": "searchPersonaName"})
+                    if not name_box or not name_box.has_attr('href'):
+                        continue
+                        
+                    personaname = name_box.text.strip()
+                    profile_url = name_box['href'].rstrip('/')
+                    
+                    img_container = row.find("div", {"class": "avatarMedium"})
+                    img_tag = img_container.find("img") if img_container else row.find("img")
+                    avatar = img_tag['src'] if img_tag and img_tag.has_attr('src') else "https://steamloopback.host/images/default_avatar.jpg"
+                    
+                    account_id = None
+                    if "/profiles/" in profile_url:
+                        steam_id_64_str = profile_url.split("/profiles/")[-1].split("/")[0].strip()
+                        if steam_id_64_str.isdigit():
+                            account_id = str(int(steam_id_64_str) - 76561197960265728)
+                    elif "/id/" in profile_url:
+                        vanity_name = profile_url.split("/id/")[-1].split("/")[0].strip()
+                        account_id = resolve_steam_vanity_url(vanity_name)
+                        
+                    if account_id:
+                        players_list.append({
+                            "account_id": account_id,
+                            "personaname": personaname,
+                            "avatar": avatar
+                        })
+                except Exception as row_err:
+                    continue
+                    
+            print(f"[DEBUG] Через сессионный шлюз Steam найдено: {len(players_list)}")
+            return players_list
+            
+    except Exception as e:
+        print(f"[DEBUG] Исключение в сессионном шлюзе Steam: {e}")
+        
+    return []
+
+def get_player_profile_from_valve(steam_id: str) -> dict:
+    """Получает данные профиля и историю матчей напрямую через Steam Web API"""
+    api_key = get_steam_api_key()
+    if not api_key:
+        raise Exception("В настройках приложения не указан Steam API Key!")
+
+    if len(steam_id) < 17:
+        steam_id_64 = str(int(steam_id) + 76561197960265728)
+    else:
+        steam_id_64 = steam_id
+        steam_id = str(int(steam_id) - 76561197960265728)
+
+    result = {}
+    user_url = f"https://api.steampowered.com/ISteamUser/GetPlayerSummaries/v0002/?key={api_key}&steamids={steam_id_64}"
+    match_url = f"https://api.steampowered.com/IDOTA2Match_570/GetMatchHistory/v0001/?key={api_key}&account_id={steam_id}"
+
+    try:
+        with httpx.Client(timeout=10.0) as client:
+            user_res = client.get(user_url)
+            user_res.raise_for_status()
+            user_data = user_res.json()
+            
+            players = user_data.get("response", {}).get("players", [])
+            if players:
+                result["name"] = players[0].get("personaname", "Unknown")
+                result["avatar"] = players[0].get("avatarfull", "")
+            else:
+                result["name"] = "Скрытый профиль"
+
+            match_res = client.get(match_url)
+            if match_res.status_code == 200:
+                match_data = match_res.json()
+                matches = match_data.get("result", {}).get("matches", [])
+                result["matches_count"] = len(matches)
+                
+                if result["matches_count"] == 100:
+                    result["matches_text"] = "Последние 100 матчей (лимит API)"
+                else:
+                    result["matches_text"] = f"Доступно матчей: {result['matches_count']}"
+            else:
+                result["matches_text"] = "История матчей скрыта в настройках Dota 2"
+
+            return result
+
+    except httpx.HTTPStatusError as e:
+        if e.response.status_code == 0x191:
+            raise Exception("Невалидный API-ключ! Проверьте его в настройках.")
+        raise Exception(f"Ошибка сервера Valve: {e.response.status_code}")
+    except Exception as e:
+        raise Exception(f"Ошибка соединения: {str(e)}")
+    
+def resolve_steam_vanity_url(vanity_name: str) -> str:
+    api_key = get_steam_api_key()
+    if not api_key:
+        return ""
+        
+    vanity_name = vanity_name.strip().rstrip('/')
+    if "steamcommunity.com/id/" in vanity_name:
+        vanity_name = vanity_name.split("/id/")[-1]
+    elif "steamcommunity.com/profiles/" in vanity_name:
+        return vanity_name.split("/profiles/")[-1]
+
+    url = f"https://api.steampowered.com/ISteamUser/ResolveVanityURL/v0001/?key={api_key}&vanityurl={vanity_name}"
+    
+    try:
+        with httpx.Client(timeout=7.0) as client:
+            response = client.get(url)
+            print(f"[DEBUG LOG] Отправлен запрос: {url}")
+            print(f"[DEBUG LOG] Статус ответа Valve: {response.status_code}")
+            
+            data = response.json().get("response", {})
+            print(f"[DEBUG LOG] Данные от Valve: {data}")
+            
+            if data.get("success") == 1:
+                steam_id_64 = int(data.get("steamid"))
+                account_id = str(steam_id_64 - 76561197960265728)
+                print(f"[DEBUG LOG] Успешно сконвертировано в ID Доты: {account_id}")
+                return account_id
+                
+            print("[DEBUG LOG] Valve вернул success != 1 (такой Vanity URL не существует)")
+            return ""
+    except Exception as e:
+        print(f"[DEBUG LOG] Ошибка внутри функции: {e}")
+        return ""

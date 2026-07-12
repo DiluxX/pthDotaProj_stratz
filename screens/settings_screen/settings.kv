@@ -1,0 +1,43 @@
+<SettingsScreen>:
+    name: "settings"
+    
+    MDBoxLayout:
+        orientation: 'vertical'
+        md_bg_color: 0.12, 0.12, 0.12, 1
+
+        MDTopAppBar:
+            title: "Настройки приложения"
+            left_action_items: [["arrow-left", lambda x: root.go_back()]]
+            elevation: 4
+            md_bg_color: 0.22, 0.28, 0.17, 1
+
+        MDBoxLayout:
+            orientation: 'vertical'
+            padding: "20dp"
+            spacing: "20dp"
+
+            MDLabel:
+                text: "Конфигурация OpenDota API"
+                font_style: "H6"
+                theme_text_color: "Custom"
+                text_color: 1, 1, 1, 1
+
+            MDLabel:
+                text: "Если у вас есть персональный API-токен (JWT) от OpenDota/Stratz, введите его ниже, чтобы расширить лимиты запросов."
+                font_style: "Body2"
+                theme_text_color: "Custom"
+                text_color: 0.6, 0.6, 0.6, 1
+
+            MDTextField:
+                id: api_key_input
+                hint_text: "API Ключ / Токен"
+                mode: "rectangle"
+                text_color_normal: 1, 1, 1, 1
+
+            MDRaisedButton:
+                text: "СОХРАНИТЬ НАСТРОЙКИ"
+                pos_hint: {"center_x": .5}
+                md_bg_color: 0.22, 0.28, 0.17, 1
+                on_release: root.save_settings()
+
+            Widget:
