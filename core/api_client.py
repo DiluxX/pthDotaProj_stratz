@@ -58,22 +58,64 @@ def search_players_by_name(name: str) -> list:
 
     players_list = _search_via_opendota(query)
 
-    # Резервный план: пробуем распознать текст как Vanity URL / прямую ссылку
-    # ТОЛЬКО если он похож на неё (нет пробелов, нет кириллицы) - иначе это
-    # почти наверняка обычный ник, и тратить время на второй запрос бессмысленно.
-    if not players_list and _looks_like_vanity(query):
-        vanity_result = _search_via_vanity(query)
-        if vanity_result:
-            players_list = vanity_result
+    # Данные в базе OpenDota обновляются только при парсинге новых матчей,
+    # поэтому ник/аватар там могут быть старыми. Одним batch-запросом
+    # подтягиваем АКТУАЛЬНЫЕ данные из Steam - это сразу покажет в списке,
+    # если аккаунт с тех пор сменил ник (а значит, скорее всего, это не тот,
+    # кого искали), вместо того чтобы выяснять это только после клика.
+    if players_list:
+        players_list = _refresh_with_current_steam_data(players_list, query)
 
     _SEARCH_CACHE[cache_key] = (time.time(), players_list)
     return players_list
 
 
-def _looks_like_vanity(query: str) -> bool:
-    if " " in query:
-        return False
-    return all(ch.isascii() for ch in query)
+def _refresh_with_current_steam_data(players: list, query: str) -> list:
+    api_key = get_steam_api_key()
+    if not api_key:
+        return players
+
+    ids64 = []
+    for p in players:
+        acc_id = p["account_id"]
+        ids64.append(str(int(acc_id) + 76561197960265728))
+
+    url = (
+        "https://api.steampowered.com/ISteamUser/GetPlayerSummaries/v0002/"
+        f"?key={api_key}&steamids={','.join(ids64)}"
+    )
+
+    try:
+        with httpx.Client(timeout=6.0) as client:
+            response = client.get(url)
+            response.raise_for_status()
+            current_by_id64 = {
+                pl.get("steamid"): pl
+                for pl in response.json().get("response", {}).get("players", [])
+            }
+    except Exception as e:
+        print(f"[DEBUG] Не удалось актуализировать данные через Steam API: {e}")
+        return players
+
+    query_lower = query.strip().lower()
+    for p, id64 in zip(players, ids64):
+        current = current_by_id64.get(id64)
+        if not current:
+            continue  # приватный/удалённый профиль - оставляем данные OpenDota как есть
+
+        current_name = current.get("personaname")
+        if current_name:
+            if current_name.strip().lower() != query_lower:
+                p["personaname"] = f"{current_name}  ⚠ ник изменился, был «{p['personaname']}»"
+            else:
+                p["personaname"] = current_name
+        if current.get("avatarfull"):
+            p["avatar"] = current["avatarfull"]
+        p["_exact_current_match"] = (current_name or "").strip().lower() == query_lower
+
+    # Точные текущие совпадения - в начало списка
+    players.sort(key=lambda x: not x.get("_exact_current_match", False))
+    return players
 
 
 def _search_via_opendota(query: str) -> list:
@@ -137,6 +179,12 @@ def parse_steam_id_input(text: str) -> str:
     if text.isdigit():
         return _steam64_to_account_id(text) if len(text) >= 17 else text
 
+    # Пользователь явно выбрал режим "по ID/ссылке" - значит короткое слово без
+    # пробелов, скорее всего, тоже vanity-имя (custom URL), а не обычный ник.
+    # Резолвим его напрямую через Steam Web API.
+    if text and " " not in text and all(ch.isascii() and ch.isalnum() for ch in text):
+        return resolve_steam_vanity_url(text)
+
     return ""
 
 
@@ -144,18 +192,7 @@ def _steam64_to_account_id(steam_id_64: str) -> str:
     return str(int(steam_id_64) - 76561197960265728)
 
 
-def _search_via_vanity(name: str) -> list:
-    try:
-        vanity_id = resolve_steam_vanity_url(name)
-        if vanity_id:
-            return [{
-                "account_id": vanity_id,
-                "personaname": name,
-                "avatar": "https://avatars.steamstatic.com/fef49e7fa7e1997310d705b2a6158ff8dc1cdfeb_full.jpg",
-            }]
-    except Exception as e:
-        print(f"[DEBUG] Не удалось разрешить Vanity URL: {e}")
-    return []
+
 
 
 def resolve_steam_vanity_url(vanity_name: str) -> str:

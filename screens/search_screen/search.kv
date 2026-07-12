@@ -16,6 +16,25 @@
             padding: "20dp"
             spacing: "15dp"
 
+            MDBoxLayout:
+                size_hint_y: None
+                height: "40dp"
+                spacing: "10dp"
+
+                MDRaisedButton:
+                    id: mode_btn_nickname
+                    text: "ПО НИКУ"
+                    size_hint_x: 0.5
+                    md_bg_color: 0.22, 0.28, 0.17, 1
+                    on_release: root.set_search_mode("nickname")
+
+                MDRaisedButton:
+                    id: mode_btn_id
+                    text: "ПО ID / ССЫЛКЕ"
+                    size_hint_x: 0.5
+                    md_bg_color: 0.3, 0.3, 0.3, 1
+                    on_release: root.set_search_mode("id")
+
             MDTextField:
                 id: search_input
                 hint_text: "Введите никнейм игрока"
