@@ -447,7 +447,7 @@ def get_hero_meta_stats() -> list:
             "winrate": winrate,
             "picks": picks,
             "image": image_url,
-            "is_meta": winrate > 51.0,
+            "is_meta": winrate > 50,
         })
 
     result.sort(key=lambda x: x["winrate"], reverse=True)
