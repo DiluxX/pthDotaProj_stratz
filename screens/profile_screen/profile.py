@@ -3,7 +3,7 @@ from kivy.clock import Clock
 from kivymd.uix.screen import MDScreen
 from kivymd.uix.list import TwoLineListItem
 from kivymd.app import MDApp
-from core.api_client import get_player_profile, get_recent_matches
+from core.api_client import get_full_profile
 from core.favorites_store import is_favorite, add_favorite, remove_favorite
 
 
@@ -33,19 +33,15 @@ class ProfileScreen(MDScreen):
         self._update_favorite_button()
 
         threading.Thread(target=self._network_load, args=(account_id,), daemon=True).start()
-        threading.Thread(target=self._network_load_matches, args=(account_id,), daemon=True).start()
 
     def _network_load(self, account_id):
         try:
-            data = get_player_profile(account_id)
+            data = get_full_profile(account_id, limit=5)
             Clock.schedule_once(lambda dt: self._ui_render_profile(data), 0)
+            Clock.schedule_once(lambda dt: self._ui_render_matches(data.get("matches", [])), 0)
         except Exception as err:
             error_text = str(err)
             Clock.schedule_once(lambda dt: self._ui_handle_error(error_text), 0)
-
-    def _network_load_matches(self, account_id):
-        matches = get_recent_matches(account_id, limit=5)
-        Clock.schedule_once(lambda dt: self._ui_render_matches(matches), 0)
 
     def _ui_render_profile(self, data):
         if not data:

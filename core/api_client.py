@@ -104,61 +104,144 @@ query PlayerProfile($steamAccountId: Long!) {
 """
 
 _RANK_MEDALS = {
-    1: "Рекрут", 2: "Страж", 3: "Крестоносец", 4: "Архонт",
+    1: "Рекрут", 2: "Страж", 3: "Рыцарь", 4: "Герой",
     5: "Легенда", 6: "Властелин", 7: "Божество", 8: "Титан",
 }
 
 
 def _decode_rank(rank_value) -> str:
     if not rank_value:
-        return "Не откалиброван"
+        return "Без ранга"
     medal, stars = divmod(int(rank_value), 10)
     medal_name = _RANK_MEDALS.get(medal)
     if not medal_name:
         return f"Ранг #{rank_value}"
     return f"{medal_name} {stars}" if stars else medal_name
 
+_STRATZ_PROFILE_WITH_MATCHES_QUERY = """
+query ProfileWithMatches($steamAccountId: Long!, $take: Int!) {
+  player(steamAccountId: $steamAccountId) {
+    steamAccount {
+      id
+      name
+      avatar
+    }
+    matchCount
+    winCount
+    ranks {
+      rank
+    }
+    matches(request: { take: $take }) {
+      id
+      didRadiantWin
+      durationSeconds
+      startDateTime
+      players(steamAccountId: $steamAccountId) {
+        heroId
+        kills
+        deaths
+        assists
+        isRadiant
+      }
+    }
+  }
+}
+"""
+
+
+def get_full_profile(account_id: str, limit: int = 5) -> dict:
+    """
+    Профиль + последние матчи ОДНИМ запросом к STRATZ через Vercel.
+    Раньше это были два параллельных запроса - Cloudflare иногда блокировал
+    один из них как подозрительную одновременную нагрузку с одного IP.
+    """
+    try:
+        return _full_profile_from_stratz(account_id, limit)
+    except Exception as e:
+        print(f"[DEBUG] STRATZ (профиль+матчи) через Vercel недоступен: {e}")
+
+    profile = get_player_profile_from_valve(account_id)
+    try:
+        profile["matches"] = _recent_matches_from_opendota(account_id, limit)
+    except Exception as e:
+        print(f"[DEBUG] OpenDota matches недоступны: {e}")
+        profile["matches"] = []
+    return profile
+
+
+def _full_profile_from_stratz(account_id: str, limit: int) -> dict:
+    payload = {
+        "query": _STRATZ_PROFILE_WITH_MATCHES_QUERY,
+        "variables": {"steamAccountId": int(account_id), "take": limit},
+    }
+
+    body = _vercel_stratz_post(payload)
+    player = (body.get("data") or {}).get("player")
+    if not player:
+        raise Exception("STRATZ не вернул данные по этому steamAccountId")
+
+    steam_account = player.get("steamAccount") or {}
+    match_count = player.get("matchCount") or 0
+    win_count = player.get("winCount") or 0
+    winrate = round((win_count / match_count) * 100, 1) if match_count else 0.0
+
+    ranks = player.get("ranks") or []
+    rank_value = ranks[0].get("rank") if ranks else None
+
+    hero_names = _get_hero_names()
+    raw_matches = player.get("matches") or []
+    matches = []
+    for m in raw_matches[:limit]:
+        players = m.get("players") or []
+        if not players:
+            continue
+        p = players[0]
+        won = bool(m.get("didRadiantWin")) == bool(p.get("isRadiant"))
+        matches.append({
+            "hero_name": hero_names.get(p.get("heroId"), f"Герой #{p.get('heroId')}"),
+            "result": "Победа" if won else "Поражение",
+            "won": won,
+            "kda": f"{p.get('kills', 0)}/{p.get('deaths', 0)}/{p.get('assists', 0)}",
+            "duration": _format_duration(m.get("durationSeconds")),
+            "date": _format_timestamp(m.get("startDateTime")),
+        })
+
+    return {
+        "name": steam_account.get("name") or "Неизвестный",
+        "avatar": steam_account.get("avatar") or "",
+        "matches_count": match_count,
+        "matches_text": f"Матчей в базе STRATZ: {match_count}",
+        "winrate": winrate,
+        "rank": _decode_rank(rank_value),
+        "source": "stratz",
+        "matches": matches,
+    }
+
+def _vercel_stratz_post(payload: dict) -> dict:
+    """POST к /api/stratz/graphql с показом реального тела ответа при ошибке."""
+    url = f"{VERCEL_PROXY_URL}/api/stratz/graphql"
+    with httpx.Client(timeout=12.0) as client:
+        response = client.post(url, json=payload)
+        if response.status_code >= 400:
+            raise Exception(f"Vercel-прокси вернул {response.status_code}: {response.text[:300]}")
+
+        body = response.json()
+        if body.get("errors"):
+            raise Exception(f"STRATZ GraphQL ошибка через Vercel: {body['errors']}")
+        return body
+
 
 def get_player_profile_from_stratz(account_id: str) -> dict:
     """
     Тянет профиль из STRATZ GraphQL API через твой безопасный Vercel-прокси.
     """
-    url = f"{VERCEL_PROXY_URL}/api/stratz/graphql"
-    
     payload = {
         "query": _STRATZ_PLAYER_QUERY,
         "variables": {"steamAccountId": int(account_id)},
     }
 
-    with httpx.Client(timeout=12.0) as client:
-        response = client.post(url, json=payload)
-        response.raise_for_status()
-
-        body = response.json()
-        if body.get("errors"):
-            raise Exception(f"STRATZ GraphQL ошибка через Vercel: {body['errors']}")
-
-        player = (body.get("data") or {}).get("player")
-        if not player:
-            raise Exception("STRATZ не вернул данные по этому steamAccountId")
-
-        steam_account = player.get("steamAccount") or {}
-        match_count = player.get("matchCount") or 0
-        win_count = player.get("winCount") or 0
-        winrate = round((win_count / match_count) * 100, 1) if match_count else 0.0
-
-        ranks = player.get("ranks") or []
-        rank_value = ranks[0].get("rank") if ranks else None
-
-        return {
-            "name": steam_account.get("name") or "Неизвестный",
-            "avatar": steam_account.get("avatar") or "",
-            "matches_count": match_count,
-            "matches_text": f"Матчей в базе STRATZ: {match_count}",
-            "winrate": winrate,
-            "rank": _decode_rank(rank_value),
-            "source": "stratz",
-        }
+    body = _vercel_stratz_post(payload)
+    player = (body.get("data") or {}).get("player")
 
 
 def get_player_profile_from_valve(steam_id: str) -> dict:
@@ -281,23 +364,6 @@ def _recent_matches_from_stratz(account_id: str, limit: int) -> list:
             raise Exception(f"STRATZ GraphQL ошибка истории матчей: {body['errors']}")
 
         raw_matches = ((body.get("data") or {}).get("player") or {}).get("matches") or []
-        hero_names = _get_hero_names()
-        result = []
-        for m in raw_matches[:limit]:
-            players = m.get("players") or []
-            if not players:
-                continue
-            p = players[0]
-            won = bool(m.get("didRadiantWin")) == bool(p.get("isRadiant"))
-            result.append({
-                "hero_name": hero_names.get(p.get("heroId"), f"Герой #{p.get('heroId')}"),
-                "result": "Победа" if won else "Поражение",
-                "won": won,
-                "kda": f"{p.get('kills', 0)}/{p.get('deaths', 0)}/{p.get('assists', 0)}",
-                "duration": _format_duration(m.get("durationSeconds")),
-                "date": _format_timestamp(m.get("startDateTime")),
-            })
-        return result
 
 
 def _recent_matches_from_opendota(account_id: str, limit: int) -> list:
