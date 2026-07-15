@@ -18,19 +18,17 @@ STEAM_API_KEY = os.environ.get("STEAM_API_KEY")
 STRATZ_API_TOKEN = os.environ.get("STRATZ_API_TOKEN")
 
 # Проверочный эндпоинт, чтобы сразу видеть статус в браузере!
-@app.get("/")
 @app.get("/api")
 async def root_test():
     return {
         "status": "ok",
-        "message": "Dota 2 Proxy Backend is successfully running!",
+        "message": "Dota 2 Proxy Backend is successfully running from proxy.py!",
         "steam_key_detected": STEAM_API_KEY is not None,
         "stratz_token_detected": STRATZ_API_TOKEN is not None
     }
 
-# 1. Получение профиля (работает и с /api, и без него)
+# 1. Получение профиля
 @app.get("/api/steam/player_summaries")
-@app.get("/steam/player_summaries")
 async def get_player_summaries(steamids: str):
     if not STEAM_API_KEY:
         raise HTTPException(status_code=500, detail="STEAM_API_KEY is not configured on Vercel")
@@ -45,7 +43,6 @@ async def get_player_summaries(steamids: str):
 
 # 2. История матчей
 @app.get("/api/steam/match_history")
-@app.get("/steam/match_history")
 async def get_match_history(account_id: str):
     if not STEAM_API_KEY:
         raise HTTPException(status_code=500, detail="STEAM_API_KEY is not configured on Vercel")
@@ -60,7 +57,6 @@ async def get_match_history(account_id: str):
 
 # 3. Преобразование Vanity URL
 @app.get("/api/steam/resolve_vanity")
-@app.get("/steam/resolve_vanity")
 async def resolve_vanity(vanityurl: str):
     if not STEAM_API_KEY:
         raise HTTPException(status_code=500, detail="STEAM_API_KEY is not configured on Vercel")
@@ -75,7 +71,6 @@ async def resolve_vanity(vanityurl: str):
 
 # 4. GraphQL-запросы к Stratz
 @app.post("/api/stratz/graphql")
-@app.post("/stratz/graphql")
 async def stratz_graphql(payload: dict):
     if not STRATZ_API_TOKEN:
         raise HTTPException(status_code=500, detail="STRATZ_API_TOKEN is not configured on Vercel")
