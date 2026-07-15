@@ -19,7 +19,7 @@ if not store.exists('app_settings'):
         'app_settings',
         api_key="",          # Steam Web API key (steamcommunity.com/dev/apikey)
         stratz_api_key="",   # Bearer-токен STRATZ (Settings -> API на stratz.com)
-        app_theme="Dark",
+        app_theme="system",  # "system" | "purple" | "light"
     )
 else:
     # Миграция для тех, у кого store уже существует, но нет нового поля

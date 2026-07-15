@@ -1,6 +1,6 @@
 <SplashScreen>:
     name: "splash"
-    md_bg_color: 0.1, 0.1, 0.1, 1
+    md_bg_color: app.bg_color
 
     MDBoxLayout:
         orientation: 'vertical'
@@ -16,7 +16,7 @@
             text: "DOTA 2 STATS"
             font_style: "H3"
             theme_text_color: "Custom"
-            text_color: 0.22, 0.28, 0.17, 1
+            text_color: app.accent_color
             halign: "center"
             bold: True
 
@@ -24,7 +24,7 @@
             text: "Мобильный аналитик"
             font_style: "Subtitle1"
             theme_text_color: "Custom"
-            text_color: 0.6, 0.6, 0.6, 1
+            text_color: app.secondary_text_color
             halign: "center"
 
         MDAnchorLayout:
@@ -34,7 +34,7 @@
                 size_hint: None, None
                 size: "48dp", "48dp"
                 active: True
-                palette: [[0.22, 0.28, 0.17, 1]]
+                palette: [app.accent_color]
 
         Widget:
             size_hint_y: 0.3

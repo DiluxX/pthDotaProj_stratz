@@ -1,97 +1,147 @@
+#:import FitImage kivymd.uix.fitimage.FitImage
+
 <ProfileScreen>:
     name: "profile"
-    
+
     MDBoxLayout:
         orientation: 'vertical'
-        md_bg_color: 0.12, 0.12, 0.12, 1
+        md_bg_color: app.bg_color
 
         MDTopAppBar:
             title: "Профиль игрока"
             left_action_items: [["arrow-left", lambda x: root.go_back()]]
             elevation: 4
-            md_bg_color: 0.22, 0.28, 0.17, 1
+            md_bg_color: app.accent_color
 
-        MDBoxLayout:
-            orientation: 'vertical'
-            padding: "20dp"
-            spacing: "15dp"
-
-            # Карточка основной информации
-            MDCard:
+        ScrollView:
+            MDBoxLayout:
                 orientation: 'vertical'
-                padding: "15dp"
-                size_hint: (1, None)
-                height: "160dp"
-                md_bg_color: 0.18, 0.18, 0.18, 1
-                radius: [12, 12, 12, 12]
-                elevation: 3
+                padding: "20dp"
+                spacing: "15dp"
+                size_hint_y: None
+                height: self.minimum_height
 
-                MDLabel:
-                    id: name_label
-                    text: "Загрузка..."
-                    font_style: "H5"
-                    theme_text_color: "Custom"
-                    text_color: 1, 1, 1, 1
-                    halign: "center"
-
-                MDLabel:
-                    id: id_label
-                    text: "Steam ID: "
-                    font_style: "Subtitle1"
-                    theme_text_color: "Custom"
-                    text_color: 0.6, 0.6, 0.6, 1
-                    halign: "center"
-
-                MDLabel:
-                    id: rank_label
-                    text: "Ранг: "
-                    font_style: "Button"
-                    theme_text_color: "Custom"
-                    text_color: 0.42, 0.55, 0.35, 1
-                    halign: "center"
-
-            # Карточка подробной статистики
-            MDCard:
-                orientation: 'vertical'
-                padding: "15dp"
-                spacing: "10dp"
-                size_hint: (1, None)
-                height: "180dp"
-                md_bg_color: 0.18, 0.18, 0.18, 1
-                radius: [12, 12, 12, 12]
-                elevation: 3
-
-                MDLabel:
-                    id: matches_label
-                    text: "Всего матчей: —"
-                    font_style: "Subtitle1"
-                    theme_text_color: "Custom"
-                    text_color: 1, 1, 1, 1
-
-                MDBoxLayout:
+                MDCard:
                     orientation: 'vertical'
-                    size_hint_y: None
-                    height: "45dp"
-                    spacing: "5dp"
+                    padding: "15dp"
+                    spacing: "6dp"
+                    size_hint: (1, None)
+                    height: "260dp"
+                    md_bg_color: app.surface_color
+                    radius: [12, 12, 12, 12]
+                    elevation: 3
+
+                    MDBoxLayout:
+                        orientation: 'horizontal'
+                        size_hint_y: None
+                        height: "40dp"
+
+                        Widget:
+
+                        MDIconButton:
+                            id: favorite_button
+                            icon: "star-outline"
+                            theme_text_color: "Custom"
+                            text_color: app.accent_color
+                            on_release: root.toggle_favorite()
+
+                    FitImage:
+                        id: avatar_image
+                        size_hint: None, None
+                        size: "72dp", "72dp"
+                        pos_hint: {"center_x": 0.5}
+                        radius: [36, 36, 36, 36]
 
                     MDLabel:
-                        id: winrate_text_label
-                        text: "Винрейт: —"
-                        font_style: "Body2"
+                        id: name_label
+                        text: "Загрузка..."
+                        font_style: "H5"
                         theme_text_color: "Custom"
-                        text_color: 0.8, 0.8, 0.8, 1
+                        text_color: app.text_color
+                        halign: "center"
 
-                    MDProgressBar:
-                        id: winrate_progress
-                        value: 0
-                        max: 100
-                        color: 0.42, 0.55, 0.35, 1 # Наш оливковый цвет для полосы
+                    MDLabel:
+                        id: id_label
+                        text: "Steam ID: "
+                        font_style: "Subtitle1"
+                        theme_text_color: "Custom"
+                        text_color: app.secondary_text_color
+                        halign: "center"
 
-                MDLabel:
-                    id: top_hero_label
-                    text: "Лучший герой: —"
-                    font_style: "Body1"
-                    theme_text_color: "Custom"
-                    text_color: 1, 1, 1, 1
+                    MDLabel:
+                        id: rank_label
+                        text: "Ранг: "
+                        font_style: "Button"
+                        theme_text_color: "Custom"
+                        text_color: app.accent_color
+                        halign: "center"
 
-            Widget: # Пружина
+                MDCard:
+                    orientation: 'vertical'
+                    padding: "15dp"
+                    spacing: "10dp"
+                    size_hint: (1, None)
+                    height: "180dp"
+                    md_bg_color: app.surface_color
+                    radius: [12, 12, 12, 12]
+                    elevation: 3
+
+                    MDLabel:
+                        id: matches_label
+                        text: "Всего матчей: —"
+                        font_style: "Subtitle1"
+                        theme_text_color: "Custom"
+                        text_color: app.text_color
+
+                    MDBoxLayout:
+                        orientation: 'vertical'
+                        size_hint_y: None
+                        height: "45dp"
+                        spacing: "5dp"
+
+                        MDLabel:
+                            id: winrate_text_label
+                            text: "Винрейт: —"
+                            font_style: "Body2"
+                            theme_text_color: "Custom"
+                            text_color: app.secondary_text_color
+
+                        MDProgressBar:
+                            id: winrate_progress
+                            value: 0
+                            max: 100
+                            color: app.accent_color
+
+                    MDLabel:
+                        id: top_hero_label
+                        text: "Лучший герой: —"
+                        font_style: "Body1"
+                        theme_text_color: "Custom"
+                        text_color: app.text_color
+
+                MDCard:
+                    orientation: 'vertical'
+                    padding: "15dp"
+                    spacing: "5dp"
+                    size_hint: (1, None)
+                    height: "460dp"
+                    md_bg_color: app.surface_color
+                    radius: [12, 12, 12, 12]
+                    elevation: 3
+
+                    MDLabel:
+                        text: "Последние матчи"
+                        font_style: "Subtitle1"
+                        theme_text_color: "Custom"
+                        text_color: app.text_color
+                        size_hint_y: None
+                        height: "30dp"
+
+                    ScrollView:
+                        MDList:
+                            id: recent_matches_list
+                            spacing: "4dp"
+
+                Widget:
+                    size_hint_y: None
+                    height: "10dp"

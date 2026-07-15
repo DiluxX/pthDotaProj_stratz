@@ -1,63 +1,40 @@
 <SearchScreen>:
     name: "search"
-    
+
     MDBoxLayout:
         orientation: 'vertical'
-        md_bg_color: 0.12, 0.12, 0.12, 1
+        md_bg_color: app.bg_color
 
         MDTopAppBar:
-            title: "Поиск игроков"
+            title: "Поиск игрока"
             elevation: 4
-            md_bg_color: 0.22, 0.28, 0.17, 1
-            right_action_items: [["cog", lambda x: root.open_settings()]]
+            md_bg_color: app.accent_color
+            left_action_items: [["star", lambda x: root.open_favorites()]]
+            right_action_items: [["sword-cross", lambda x: root.open_heroes()], ["cog", lambda x: root.open_settings()]]
 
         MDBoxLayout:
             orientation: 'vertical'
             padding: "20dp"
             spacing: "15dp"
 
-            MDBoxLayout:
+            MDLabel:
+                text: "Введи SteamID, SteamID64 или ссылку на профиль Steam"
+                theme_text_color: "Custom"
+                text_color: app.secondary_text_color
+                font_style: "Body2"
                 size_hint_y: None
                 height: "40dp"
-                spacing: "10dp"
-
-                MDRaisedButton:
-                    id: mode_btn_nickname
-                    text: "ПО НИКУ"
-                    size_hint_x: 0.5
-                    md_bg_color: 0.22, 0.28, 0.17, 1
-                    on_release: root.set_search_mode("nickname")
-
-                MDRaisedButton:
-                    id: mode_btn_id
-                    text: "ПО ID / ССЫЛКЕ"
-                    size_hint_x: 0.5
-                    md_bg_color: 0.3, 0.3, 0.3, 1
-                    on_release: root.set_search_mode("id")
 
             MDTextField:
                 id: search_input
-                hint_text: "Введите никнейм игрока"
+                hint_text: "Steam ID / SteamID64 / ссылка на профиль"
                 mode: "rectangle"
-                text_color_normal: 1, 1, 1, 1
+                text_color_normal: app.text_color
 
             MDRaisedButton:
                 text: "НАЙТИ ИГРОКА"
                 pos_hint: {"center_x": .5}
-                md_bg_color: 0.22, 0.28, 0.17, 1
+                md_bg_color: app.accent_color
                 on_release: root.start_search()
 
-            MDAnchorLayout:
-                size_hint_y: None
-                height: "40dp"
-                MDSpinner:
-                    id: loading_spinner
-                    size_hint: None, None
-                    size: "30dp", "30dp"
-                    active: False
-
-            ScrollView:
-                MDList:
-                    id: results_list
-                    spacing: "10dp"
-                    padding: "10dp"
+            Widget:

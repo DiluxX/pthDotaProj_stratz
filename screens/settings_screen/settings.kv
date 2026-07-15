@@ -3,59 +3,97 @@
 
     MDBoxLayout:
         orientation: 'vertical'
-        md_bg_color: 0.12, 0.12, 0.12, 1
+        md_bg_color: app.bg_color
 
         MDTopAppBar:
             title: "Настройки приложения"
             left_action_items: [["arrow-left", lambda x: root.go_back()]]
             elevation: 4
-            md_bg_color: 0.22, 0.28, 0.17, 1
+            md_bg_color: app.accent_color
 
-        MDBoxLayout:
-            orientation: 'vertical'
-            padding: "20dp"
-            spacing: "15dp"
+        ScrollView:
+            MDBoxLayout:
+                orientation: 'vertical'
+                padding: "20dp"
+                spacing: "15dp"
+                size_hint_y: None
+                height: self.minimum_height
 
-            MDLabel:
-                text: "Steam Web API"
-                font_style: "H6"
-                theme_text_color: "Custom"
-                text_color: 1, 1, 1, 1
+                MDLabel:
+                    text: "Тема оформления"
+                    font_style: "H6"
+                    theme_text_color: "Custom"
+                    text_color: app.text_color
 
-            MDLabel:
-                text: "Нужен для загрузки профиля, если STRATZ недоступен. Получить: steamcommunity.com/dev/apikey"
-                font_style: "Body2"
-                theme_text_color: "Custom"
-                text_color: 0.6, 0.6, 0.6, 1
+                MDBoxLayout:
+                    size_hint_y: None
+                    height: "44dp"
+                    spacing: "8dp"
 
-            MDTextField:
-                id: steam_key_input
-                hint_text: "Steam API Key"
-                mode: "rectangle"
-                text_color_normal: 1, 1, 1, 1
+                    MDRaisedButton:
+                        id: theme_btn_system
+                        text: "СИСТЕМНАЯ"
+                        size_hint_x: 1
+                        on_release: root.set_theme("system")
 
-            MDLabel:
-                text: "STRATZ API"
-                font_style: "H6"
-                theme_text_color: "Custom"
-                text_color: 1, 1, 1, 1
+                    MDRaisedButton:
+                        id: theme_btn_purple
+                        text: "ФИОЛЕТОВАЯ"
+                        size_hint_x: 1
+                        on_release: root.set_theme("purple")
 
-            MDLabel:
-                text: "Bearer-токен для свежих данных, ранга и винрейта. Получить: stratz.com -> Settings -> API"
-                font_style: "Body2"
-                theme_text_color: "Custom"
-                text_color: 0.6, 0.6, 0.6, 1
+                    MDRaisedButton:
+                        id: theme_btn_light
+                        text: "СВЕТЛАЯ"
+                        size_hint_x: 1
+                        on_release: root.set_theme("light")
 
-            MDTextField:
-                id: stratz_key_input
-                hint_text: "STRATZ API Key"
-                mode: "rectangle"
-                text_color_normal: 1, 1, 1, 1
+                MDLabel:
+                    text: "Steam Web API"
+                    font_style: "H6"
+                    theme_text_color: "Custom"
+                    text_color: app.text_color
 
-            MDRaisedButton:
-                text: "СОХРАНИТЬ НАСТРОЙКИ"
-                pos_hint: {"center_x": .5}
-                md_bg_color: 0.22, 0.28, 0.17, 1
-                on_release: root.save_settings()
+                MDLabel:
+                    text: "Нужен для загрузки профиля, если STRATZ недоступен. Получить: steamcommunity.com/dev/apikey"
+                    font_style: "Body2"
+                    theme_text_color: "Custom"
+                    text_color: app.secondary_text_color
+                    size_hint_y: None
+                    height: "40dp"
 
-            Widget:
+                MDTextField:
+                    id: steam_key_input
+                    hint_text: "Steam API Key"
+                    mode: "rectangle"
+                    text_color_normal: app.text_color
+
+                MDLabel:
+                    text: "STRATZ API"
+                    font_style: "H6"
+                    theme_text_color: "Custom"
+                    text_color: app.text_color
+
+                MDLabel:
+                    text: "Bearer-токен для свежих данных и винрейта. Получить: stratz.com -> Settings -> API"
+                    font_style: "Body2"
+                    theme_text_color: "Custom"
+                    text_color: app.secondary_text_color
+                    size_hint_y: None
+                    height: "40dp"
+
+                MDTextField:
+                    id: stratz_key_input
+                    hint_text: "STRATZ API Key"
+                    mode: "rectangle"
+                    text_color_normal: app.text_color
+
+                MDRaisedButton:
+                    text: "СОХРАНИТЬ НАСТРОЙКИ"
+                    pos_hint: {"center_x": .5}
+                    md_bg_color: app.accent_color
+                    on_release: root.save_settings()
+
+                Widget:
+                    size_hint_y: None
+                    height: "20dp"

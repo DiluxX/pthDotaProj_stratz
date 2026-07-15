@@ -1,6 +1,4 @@
-import time
 import httpx
-import urllib.parse
 from config import store
 
 # ---------------------------------------------------------------------------
@@ -24,147 +22,22 @@ def get_stratz_api_key():
 
 
 # ---------------------------------------------------------------------------
-# Поиск игрока по нику (OpenDota)
+# Разбор ввода пользователя: ID / SteamID64 / ссылка на профиль / vanity-имя
 #
-# У STRATZ нет публичного эндпоинта полнотекстового поиска по нику - только
-# поиск по конкретному steamAccountId. Поэтому для поиска по имени по-прежнему
-# используем OpenDota, а STRATZ подключаем для самого профиля (см. ниже),
-# где как раз и нужны свежие данные, ранг и винрейт.
+# Поиска по нику больше нет: у Steam нет публичного API для полнотекстового
+# поиска аккаунтов по нику, а сторонние индексы (OpenDota и т.п.) неточны и
+# неполны. Единственный надёжный способ найти игрока - точный ID или ссылка.
 # ---------------------------------------------------------------------------
-
-_SEARCH_CACHE = {}
-_SEARCH_CACHE_TTL = 60  # секунд - чтобы повторный ввод того же ника не бил API заново
-
-_HTTP_HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
-    "Accept": "application/json",
-}
-
-
-def search_players_by_name(name: str) -> list:
-    """
-    Ищет игроков по никнейму через OpenDota API.
-    Возвращает СПИСОК всех найденных совпадений (а не только первое).
-    Безопасно кодирует спецсимволы и кириллицу.
-    """
-    query = name.strip()
-    if not query:
-        return []
-
-    cache_key = query.lower()
-    cached = _SEARCH_CACHE.get(cache_key)
-    if cached and (time.time() - cached[0]) < _SEARCH_CACHE_TTL:
-        return cached[1]
-
-    players_list = _search_via_opendota(query)
-
-    # Данные в базе OpenDota обновляются только при парсинге новых матчей,
-    # поэтому ник/аватар там могут быть старыми. Одним batch-запросом
-    # подтягиваем АКТУАЛЬНЫЕ данные из Steam - это сразу покажет в списке,
-    # если аккаунт с тех пор сменил ник (а значит, скорее всего, это не тот,
-    # кого искали), вместо того чтобы выяснять это только после клика.
-    if players_list:
-        players_list = _refresh_with_current_steam_data(players_list, query)
-
-    _SEARCH_CACHE[cache_key] = (time.time(), players_list)
-    return players_list
-
-
-def _refresh_with_current_steam_data(players: list, query: str) -> list:
-    api_key = get_steam_api_key()
-    if not api_key:
-        return players
-
-    ids64 = []
-    for p in players:
-        acc_id = p["account_id"]
-        ids64.append(str(int(acc_id) + 76561197960265728))
-
-    url = (
-        "https://api.steampowered.com/ISteamUser/GetPlayerSummaries/v0002/"
-        f"?key={api_key}&steamids={','.join(ids64)}"
-    )
-
-    try:
-        with httpx.Client(timeout=6.0) as client:
-            response = client.get(url)
-            response.raise_for_status()
-            current_by_id64 = {
-                pl.get("steamid"): pl
-                for pl in response.json().get("response", {}).get("players", [])
-            }
-    except Exception as e:
-        print(f"[DEBUG] Не удалось актуализировать данные через Steam API: {e}")
-        return players
-
-    query_lower = query.strip().lower()
-    for p, id64 in zip(players, ids64):
-        current = current_by_id64.get(id64)
-        if not current:
-            continue  # приватный/удалённый профиль - оставляем данные OpenDota как есть
-
-        current_name = current.get("personaname")
-        if current_name:
-            if current_name.strip().lower() != query_lower:
-                p["personaname"] = f"{current_name}  ⚠ ник изменился, был «{p['personaname']}»"
-            else:
-                p["personaname"] = current_name
-        if current.get("avatarfull"):
-            p["avatar"] = current["avatarfull"]
-        p["_exact_current_match"] = (current_name or "").strip().lower() == query_lower
-
-    # Точные текущие совпадения - в начало списка
-    players.sort(key=lambda x: not x.get("_exact_current_match", False))
-    return players
-
-
-def _search_via_opendota(query: str) -> list:
-    encoded_name = urllib.parse.quote(query)
-    url = f"https://api.opendota.com/api/search?q={encoded_name}"
-
-    try:
-        with httpx.Client(headers=_HTTP_HEADERS, timeout=5.0) as client:
-            response = client.get(url)
-            if response.status_code == 200:
-                results = response.json()
-                players_list = []
-                for p in results[:15]:  # ограничиваемся топ-15 совпадений
-                    account_id = p.get("account_id")
-                    if not account_id:
-                        continue
-                    personaname = p.get("personaname") or "Без никнейма"
-                    players_list.append({
-                        "account_id": str(account_id),
-                        "personaname": personaname,
-                        "avatar": p.get("avatarfull") or p.get("avatar") or "https://avatars.steamstatic.com/fef49e7fa7e1997310d705b2a6158ff8dc1cdfeb_full.jpg",
-                        "last_match_time": p.get("last_match_time"),
-                        # для сортировки: точное совпадение ника - в начало списка,
-                        # иначе OpenDota может первым отдать однофамильца/тёзку
-                        "_exact_match": personaname.strip().lower() == query.strip().lower(),
-                    })
-
-                players_list.sort(key=lambda x: (not x["_exact_match"], x["personaname"].lower()))
-                for p in players_list:
-                    p.pop("_exact_match", None)
-
-                print(f"[DEBUG] OpenDota: найдено {len(players_list)} игроков по запросу '{query}'")
-                return players_list
-            print(f"[DEBUG] OpenDota вернула код {response.status_code}")
-    except httpx.TimeoutException:
-        print("[DEBUG] OpenDota не ответила за 5 секунд (timeout)")
-    except Exception as e:
-        print(f"[DEBUG] Исключение при поиске через OpenDota: {e}")
-
-    return []
-
 
 def parse_steam_id_input(text: str) -> str:
     """
-    Пытается распознать в тексте прямую ссылку на Steam-профиль или голый
-    SteamID64/account_id и вернуть 32-битный account_id.
-    Возвращает "" если это обычный ник, а не ID/ссылка.
+    Распознаёт в тексте прямую ссылку на Steam-профиль, голый
+    SteamID64/account_id или короткое vanity-имя и возвращает 32-битный
+    account_id. Возвращает "" если распознать не удалось.
     """
     text = text.strip().rstrip('/')
+    if not text:
+        return ""
 
     if "steamcommunity.com/profiles/" in text:
         raw_id = text.split("/profiles/")[-1].split("/")[0].strip()
@@ -179,10 +52,8 @@ def parse_steam_id_input(text: str) -> str:
     if text.isdigit():
         return _steam64_to_account_id(text) if len(text) >= 17 else text
 
-    # Пользователь явно выбрал режим "по ID/ссылке" - значит короткое слово без
-    # пробелов, скорее всего, тоже vanity-имя (custom URL), а не обычный ник.
-    # Резолвим его напрямую через Steam Web API.
-    if text and " " not in text and all(ch.isascii() and ch.isalnum() for ch in text):
+    # Короткое слово без пробелов - пробуем как vanity-имя (custom URL).
+    if " " not in text and all(ch.isascii() and ch.isalnum() for ch in text):
         return resolve_steam_vanity_url(text)
 
     return ""
@@ -190,9 +61,6 @@ def parse_steam_id_input(text: str) -> str:
 
 def _steam64_to_account_id(steam_id_64: str) -> str:
     return str(int(steam_id_64) - 76561197960265728)
-
-
-
 
 
 def resolve_steam_vanity_url(vanity_name: str) -> str:
@@ -225,9 +93,9 @@ def resolve_steam_vanity_url(vanity_name: str) -> str:
 # ---------------------------------------------------------------------------
 # Профиль игрока
 #
-# Пробуем сначала STRATZ (даёт актуальный ник/аватар/ранг/винрейт одним
-# запросом), а если он недоступен (нет ключа, лимит, сеть) - откатываемся
-# на Steam Web API, как было раньше.
+# Пробуем сначала STRATZ (даёт актуальный ник/аватар/винрейт одним запросом),
+# а если он недоступен (нет ключа, лимит, Cloudflare, сеть) - откатываемся
+# на Steam Web API.
 # ---------------------------------------------------------------------------
 
 STRATZ_GRAPHQL_URL = "https://api.stratz.com/graphql"
@@ -242,20 +110,40 @@ query PlayerProfile($steamAccountId: Long!) {
     }
     matchCount
     winCount
+    ranks {
+      rank
+    }
   }
 }
 """
+
+_RANK_MEDALS = {
+    1: "Рекрут", 2: "Страж", 3: "Крестоносец", 4: "Архонт",
+    5: "Легенда", 6: "Властелин", 7: "Божество", 8: "Титан",
+}
+
+
+def _decode_rank(rank_value) -> str:
+    if not rank_value:
+        return "Не откалиброван"
+    medal, stars = divmod(int(rank_value), 10)
+    medal_name = _RANK_MEDALS.get(medal)
+    if not medal_name:
+        return f"Ранг #{rank_value}"
+    return f"{medal_name} {stars}" if stars else medal_name
 
 
 def _stratz_headers():
     token = get_stratz_api_key()
     return {
-        # Cloudflare у STRATZ блокирует запросы со стандартным User-Agent
-        # httpx/requests - обязательно нужен осмысленный UA с контактом/названием приложения.
-        "User-Agent": "pthDotaProj_stratz - Dota2Stats/1.0",
+        # Официальное требование STRATZ (объявление разработчиков от 15.10.2024):
+        # без ТОЧНО такого User-Agent запросы блокируются.
+        "User-Agent": "STRATZ_API",
         "Authorization": f"Bearer {token}",
         "Content-Type": "application/json",
+        "Accept": "application/graphql-response+json, application/json",
     }
+
 
 
 def get_player_profile_from_stratz(account_id: str) -> dict:
@@ -296,12 +184,16 @@ def get_player_profile_from_stratz(account_id: str) -> dict:
         win_count = player.get("winCount") or 0
         winrate = round((win_count / match_count) * 100, 1) if match_count else 0.0
 
+        ranks = player.get("ranks") or []
+        rank_value = ranks[0].get("rank") if ranks else None
+
         return {
             "name": steam_account.get("name") or "Неизвестный",
             "avatar": steam_account.get("avatar") or "",
             "matches_count": match_count,
             "matches_text": f"Матчей в базе STRATZ: {match_count}",
             "winrate": winrate,
+            "rank": _decode_rank(rank_value),
             "source": "stratz",
         }
 
@@ -369,3 +261,180 @@ def get_player_profile(account_id: str) -> dict:
     except Exception as stratz_err:
         print(f"[DEBUG] STRATZ недоступен ({stratz_err}), откат на Steam Web API")
         return get_player_profile_from_valve(account_id)
+
+
+# ---------------------------------------------------------------------------
+# Последние матчи
+#
+# У STRATZ список матчей в GraphQL доступен только premium-ключам (см. их
+# официальное объявление), поэтому основной путь - OpenDota (открытый,
+# без premium), а STRATZ пробуем первым просто на случай premium-ключа.
+# ---------------------------------------------------------------------------
+
+_HTTP_HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+    "Accept": "application/json",
+}
+
+_HERO_NAMES_CACHE = {}
+
+_STRATZ_RECENT_MATCHES_QUERY = """
+query RecentMatches($steamAccountId: Long!, $take: Int!) {
+  player(steamAccountId: $steamAccountId) {
+    matches(request: { take: $take }) {
+      id
+      didRadiantWin
+      durationSeconds
+      startDateTime
+      players(steamAccountId: $steamAccountId) {
+        heroId
+        kills
+        deaths
+        assists
+        isRadiant
+      }
+    }
+  }
+}
+"""
+
+
+def get_recent_matches(account_id: str, limit: int = 5) -> list:
+    try:
+        matches = _recent_matches_from_stratz(account_id, limit)
+        if matches:
+            return matches
+    except Exception as e:
+        print(f"[DEBUG] STRATZ matches недоступны: {e}")
+
+    try:
+        return _recent_matches_from_opendota(account_id, limit)
+    except Exception as e:
+        print(f"[DEBUG] OpenDota matches недоступны: {e}")
+
+    return []
+
+
+def _recent_matches_from_stratz(account_id: str, limit: int) -> list:
+    token = get_stratz_api_key()
+    if not token:
+        raise Exception("STRATZ ключ не задан")
+
+    payload = {
+        "query": _STRATZ_RECENT_MATCHES_QUERY,
+        "variables": {"steamAccountId": int(account_id), "take": limit},
+    }
+
+    with httpx.Client(timeout=10.0) as client:
+        response = client.post(STRATZ_GRAPHQL_URL, headers=_stratz_headers(), json=payload)
+        response.raise_for_status()
+        body = response.json()
+        if body.get("errors"):
+            raise Exception(f"STRATZ GraphQL ошибка: {body['errors']}")
+
+        raw_matches = ((body.get("data") or {}).get("player") or {}).get("matches") or []
+        hero_names = _get_hero_names()
+        result = []
+        for m in raw_matches[:limit]:
+            players = m.get("players") or []
+            if not players:
+                continue
+            p = players[0]
+            won = bool(m.get("didRadiantWin")) == bool(p.get("isRadiant"))
+            result.append({
+                "hero_name": hero_names.get(p.get("heroId"), f"Герой #{p.get('heroId')}"),
+                "result": "Победа" if won else "Поражение",
+                "won": won,
+                "kda": f"{p.get('kills', 0)}/{p.get('deaths', 0)}/{p.get('assists', 0)}",
+                "duration": _format_duration(m.get("durationSeconds")),
+                "date": _format_timestamp(m.get("startDateTime")),
+            })
+        return result
+
+
+def _recent_matches_from_opendota(account_id: str, limit: int) -> list:
+    url = f"https://api.opendota.com/api/players/{account_id}/matches?limit={limit}"
+
+    with httpx.Client(headers=_HTTP_HEADERS, timeout=6.0) as client:
+        response = client.get(url)
+        response.raise_for_status()
+        raw_matches = response.json()
+
+    hero_names = _get_hero_names()
+    result = []
+    for m in raw_matches[:limit]:
+        won = (m.get("player_slot", 0) < 128) == bool(m.get("radiant_win"))
+        result.append({
+            "hero_name": hero_names.get(m.get("hero_id"), f"Герой #{m.get('hero_id')}"),
+            "result": "Победа" if won else "Поражение",
+            "won": won,
+            "kda": f"{m.get('kills', 0)}/{m.get('deaths', 0)}/{m.get('assists', 0)}",
+            "duration": _format_duration(m.get("duration")),
+            "date": _format_timestamp(m.get("start_time")),
+        })
+    return result
+
+
+def _get_hero_names() -> dict:
+    global _HERO_NAMES_CACHE
+    if _HERO_NAMES_CACHE:
+        return _HERO_NAMES_CACHE
+    try:
+        with httpx.Client(headers=_HTTP_HEADERS, timeout=5.0) as client:
+            response = client.get("https://api.opendota.com/api/heroes")
+            response.raise_for_status()
+            _HERO_NAMES_CACHE = {h["id"]: h.get("localized_name", f"Герой #{h['id']}") for h in response.json()}
+    except Exception as e:
+        print(f"[DEBUG] Не удалось получить список героев: {e}")
+    return _HERO_NAMES_CACHE
+
+
+def _format_duration(seconds) -> str:
+    if not seconds:
+        return "—"
+    seconds = int(seconds)
+    return f"{seconds // 60}:{seconds % 60:02d}"
+
+
+def _format_timestamp(ts) -> str:
+    if not ts:
+        return "—"
+    try:
+        import datetime
+        return datetime.datetime.utcfromtimestamp(int(ts)).strftime("%d.%m.%Y")
+    except Exception:
+        return "—"
+
+
+# ---------------------------------------------------------------------------
+# Мета героев (винрейт по всем публичным брекетам OpenDota)
+# ---------------------------------------------------------------------------
+
+def get_hero_meta_stats() -> list:
+    url = "https://api.opendota.com/api/heroStats"
+
+    with httpx.Client(headers=_HTTP_HEADERS, timeout=8.0) as client:
+        response = client.get(url)
+        response.raise_for_status()
+        raw_heroes = response.json()
+
+    result = []
+    for h in raw_heroes:
+        picks = sum(h.get(f"{i}_pick") or 0 for i in range(1, 9))
+        wins = sum(h.get(f"{i}_win") or 0 for i in range(1, 9))
+        winrate = round((wins / picks) * 100, 1) if picks else 0.0
+
+        img = h.get("img") or ""
+        image_url = f"https://cdn.cloudflare.steamstatic.com{img}" if img else ""
+
+        result.append({
+            "id": h.get("id"),
+            "name": h.get("localized_name", "Неизвестный герой"),
+            "winrate": winrate,
+            "picks": picks,
+            "image": image_url,
+            "is_meta": winrate > 51.0,
+        })
+
+    result.sort(key=lambda x: x["winrate"], reverse=True)
+    return result

@@ -1,0 +1,54 @@
+<HeroesScreen>:
+    name: "heroes"
+
+    MDBoxLayout:
+        orientation: 'vertical'
+        md_bg_color: app.bg_color
+
+        MDTopAppBar:
+            title: "Герои и мета"
+            left_action_items: [["arrow-left", lambda x: root.go_back()]]
+            elevation: 4
+            md_bg_color: app.accent_color
+
+        MDLabel:
+            id: status_label
+            text: ""
+            halign: "center"
+            theme_text_color: "Custom"
+            text_color: app.secondary_text_color
+            size_hint_y: None
+            height: "60dp"
+            padding: "20dp", "10dp"
+
+        ScrollView:
+            MDBoxLayout:
+                orientation: 'vertical'
+                padding: "10dp"
+                spacing: "10dp"
+                size_hint_y: None
+                height: self.minimum_height
+
+                MDLabel:
+                    id: meta_header
+                    text: "Мета (винрейт > 51%)"
+                    font_style: "H6"
+                    theme_text_color: "Custom"
+                    text_color: app.accent_color
+                    size_hint_y: None
+                    height: "36dp"
+
+                MDList:
+                    id: meta_list
+
+                MDLabel:
+                    id: regular_header
+                    text: "Обычные герои"
+                    font_style: "H6"
+                    theme_text_color: "Custom"
+                    text_color: app.text_color
+                    size_hint_y: None
+                    height: "36dp"
+
+                MDList:
+                    id: regular_list

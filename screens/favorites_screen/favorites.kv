@@ -1,0 +1,29 @@
+<FavoritesScreen>:
+    name: "favorites"
+
+    MDBoxLayout:
+        orientation: 'vertical'
+        md_bg_color: app.bg_color
+
+        MDTopAppBar:
+            title: "Избранные игроки"
+            left_action_items: [["arrow-left", lambda x: root.go_back()]]
+            elevation: 4
+            md_bg_color: app.accent_color
+
+        MDLabel:
+            id: empty_label
+            text: ""
+            halign: "center"
+            theme_text_color: "Custom"
+            text_color: app.secondary_text_color
+            opacity: 0
+            size_hint_y: None
+            height: "80dp"
+            padding: "20dp", "20dp"
+
+        ScrollView:
+            MDList:
+                id: favorites_list
+                spacing: "10dp"
+                padding: "10dp"
