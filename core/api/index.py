@@ -17,7 +17,18 @@ app.add_middleware(
 STEAM_API_KEY = os.environ.get("STEAM_API_KEY")
 STRATZ_API_TOKEN = os.environ.get("STRATZ_API_TOKEN")
 
-# 1. Получение профиля (поддерживает оба пути)
+# Проверочный эндпоинт, чтобы сразу видеть статус в браузере!
+@app.get("/")
+@app.get("/api")
+async def root_test():
+    return {
+        "status": "ok",
+        "message": "Dota 2 Proxy Backend is successfully running!",
+        "steam_key_detected": STEAM_API_KEY is not None,
+        "stratz_token_detected": STRATZ_API_TOKEN is not None
+    }
+
+# 1. Получение профиля (работает и с /api, и без него)
 @app.get("/api/steam/player_summaries")
 @app.get("/steam/player_summaries")
 async def get_player_summaries(steamids: str):
@@ -32,7 +43,7 @@ async def get_player_summaries(steamids: str):
         except Exception as e:
             raise HTTPException(status_code=502, detail=str(e))
 
-# 2. История матчей (поддерживает оба пути)
+# 2. История матчей
 @app.get("/api/steam/match_history")
 @app.get("/steam/match_history")
 async def get_match_history(account_id: str):
@@ -47,7 +58,7 @@ async def get_match_history(account_id: str):
         except Exception as e:
             raise HTTPException(status_code=502, detail=str(e))
 
-# 3. Преобразование Vanity URL (поддерживает оба пути)
+# 3. Преобразование Vanity URL
 @app.get("/api/steam/resolve_vanity")
 @app.get("/steam/resolve_vanity")
 async def resolve_vanity(vanityurl: str):
@@ -62,7 +73,7 @@ async def resolve_vanity(vanityurl: str):
         except Exception as e:
             raise HTTPException(status_code=502, detail=str(e))
 
-# 4. GraphQL-запросы к Stratz (поддерживает оба пути)
+# 4. GraphQL-запросы к Stratz
 @app.post("/api/stratz/graphql")
 @app.post("/stratz/graphql")
 async def stratz_graphql(payload: dict):
