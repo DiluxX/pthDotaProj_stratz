@@ -7,6 +7,10 @@
   ],
   "rewrites": [
     {
+      "source": "/api",
+      "destination": "/proxy.py"
+    },
+    {
       "source": "/api/(.*)",
       "destination": "/proxy.py"
     }
