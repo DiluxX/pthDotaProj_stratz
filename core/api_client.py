@@ -1,32 +1,28 @@
 import httpx
+import urllib.parse
 from config import store
 
 # ---------------------------------------------------------------------------
-# Ключи
+# ТВОЙ СЕКРЕТНЫЙ АДРЕС НА VERCEL
+# ---------------------------------------------------------------------------
+VERCEL_PROXY_URL = "https://pth-dota-proj-stratz-i3gwy94o3-diluxxs-projects.vercel.app"
+
+# ---------------------------------------------------------------------------
+# Ключи (Локально больше не хранятся, сервер Vercel подставит их сам)
 # ---------------------------------------------------------------------------
 
 def get_steam_api_key():
-    """Steam Web API key (для api.steampowered.com)."""
-    try:
-        return store.get('app_settings').get('api_key', "").strip()
-    except KeyError:
-        return ""
+    """Больше не считывает ключ локально. Оставлено для совместимости."""
+    return ""
 
 
 def get_stratz_api_key():
-    """Bearer-токен STRATZ (для api.stratz.com/graphql)."""
-    try:
-        return store.get('app_settings').get('stratz_api_key', "").strip()
-    except KeyError:
-        return ""
+    """Больше не считывает токен локально. Оставлено для совместимости."""
+    return ""
 
 
 # ---------------------------------------------------------------------------
 # Разбор ввода пользователя: ID / SteamID64 / ссылка на профиль / vanity-имя
-#
-# Поиска по нику больше нет: у Steam нет публичного API для полнотекстового
-# поиска аккаунтов по нику, а сторонние индексы (OpenDota и т.п.) неточны и
-# неполны. Единственный надёжный способ найти игрока - точный ID или ссылка.
 # ---------------------------------------------------------------------------
 
 def parse_steam_id_input(text: str) -> str:
@@ -64,41 +60,31 @@ def _steam64_to_account_id(steam_id_64: str) -> str:
 
 
 def resolve_steam_vanity_url(vanity_name: str) -> str:
-    """Преобразует буквенный никнейм ссылки в числовой ID через Steam Web API"""
-    api_key = get_steam_api_key()
-    if not api_key:
-        return ""
-
+    """Преобразует буквенный никнейм ссылки в числовой ID через твой Vercel-прокси"""
     vanity_name = vanity_name.strip().rstrip('/')
     if "steamcommunity.com/id/" in vanity_name:
         vanity_name = vanity_name.split("/id/")[-1]
     elif "steamcommunity.com/profiles/" in vanity_name:
         return vanity_name.split("/profiles/")[-1]
 
-    url = f"https://api.steampowered.com/ISteamUser/ResolveVanityURL/v0001/?key={api_key}&vanityurl={vanity_name}"
+    url = f"{VERCEL_PROXY_URL}/api/steam/resolve_vanity"
 
     try:
-        with httpx.Client(timeout=5.0) as client:
-            response = client.get(url)
+        with httpx.Client(timeout=7.0) as client:
+            response = client.get(url, params={"vanityurl": vanity_name})
             data = response.json().get("response", {})
             if data.get("success") == 1:
                 steam_id_64 = int(data.get("steamid"))
                 return str(steam_id_64 - 76561197960265728)
             return ""
     except Exception as e:
-        print(f"[DEBUG LOG] Ошибка при резолве Vanity URL: {e}")
+        print(f"[DEBUG LOG] Ошибка при резолве Vanity URL через Vercel: {e}")
         return ""
 
 
 # ---------------------------------------------------------------------------
 # Профиль игрока
-#
-# Пробуем сначала STRATZ (даёт актуальный ник/аватар/винрейт одним запросом),
-# а если он недоступен (нет ключа, лимит, Cloudflare, сеть) - откатываемся
-# на Steam Web API.
 # ---------------------------------------------------------------------------
-
-STRATZ_GRAPHQL_URL = "https://api.stratz.com/graphql"
 
 _STRATZ_PLAYER_QUERY = """
 query PlayerProfile($steamAccountId: Long!) {
@@ -133,47 +119,24 @@ def _decode_rank(rank_value) -> str:
     return f"{medal_name} {stars}" if stars else medal_name
 
 
-def _stratz_headers():
-    token = get_stratz_api_key()
-    return {
-        # Официальное требование STRATZ (объявление разработчиков от 15.10.2024):
-        # без ТОЧНО такого User-Agent запросы блокируются.
-        "User-Agent": "STRATZ_API",
-        "Authorization": f"Bearer {token}",
-        "Content-Type": "application/json",
-        "Accept": "application/graphql-response+json, application/json",
-    }
-
-
-
 def get_player_profile_from_stratz(account_id: str) -> dict:
     """
-    Тянет профиль напрямую из STRATZ GraphQL API.
-    Бросает исключение, если ключ не задан, или STRATZ ответил ошибкой -
-    вызывающий код должен откатиться на get_player_profile_from_valve.
+    Тянет профиль из STRATZ GraphQL API через твой безопасный Vercel-прокси.
     """
-    token = get_stratz_api_key()
-    if not token:
-        raise Exception("STRATZ API ключ не задан в настройках")
-
+    url = f"{VERCEL_PROXY_URL}/api/stratz/graphql"
+    
     payload = {
         "query": _STRATZ_PLAYER_QUERY,
         "variables": {"steamAccountId": int(account_id)},
     }
 
-    with httpx.Client(timeout=10.0) as client:
-        response = client.post(STRATZ_GRAPHQL_URL, headers=_stratz_headers(), json=payload)
-
-        if response.status_code == 403:
-            raise Exception(
-                "STRATZ заблокировал запрос (403/Cloudflare). Проверь, что ключ "
-                "действителен и не истёк."
-            )
+    with httpx.Client(timeout=12.0) as client:
+        response = client.post(url, json=payload)
         response.raise_for_status()
 
         body = response.json()
         if body.get("errors"):
-            raise Exception(f"STRATZ GraphQL ошибка: {body['errors']}")
+            raise Exception(f"STRATZ GraphQL ошибка через Vercel: {body['errors']}")
 
         player = (body.get("data") or {}).get("player")
         if not player:
@@ -199,11 +162,7 @@ def get_player_profile_from_stratz(account_id: str) -> dict:
 
 
 def get_player_profile_from_valve(steam_id: str) -> dict:
-    """Получает данные профиля и историю матчей напрямую через Steam Web API (запасной вариант)"""
-    api_key = get_steam_api_key()
-    if not api_key:
-        raise Exception("В настройках приложения не указан Steam API Key!")
-
+    """Получает данные профиля и историю матчей через прокси-эндпоинты Steam на Vercel"""
     if len(steam_id) < 17:
         steam_id_64 = str(int(steam_id) + 76561197960265728)
     else:
@@ -211,12 +170,12 @@ def get_player_profile_from_valve(steam_id: str) -> dict:
         steam_id = str(int(steam_id) - 76561197960265728)
 
     result = {"source": "valve"}
-    user_url = f"https://api.steampowered.com/ISteamUser/GetPlayerSummaries/v0002/?key={api_key}&steamids={steam_id_64}"
-    match_url = f"https://api.steampowered.com/IDOTA2Match_570/GetMatchHistory/v0001/?key={api_key}&account_id={steam_id}"
+    user_url = f"{VERCEL_PROXY_URL}/api/steam/player_summaries"
+    match_url = f"{VERCEL_PROXY_URL}/api/steam/match_history"
 
     try:
         with httpx.Client(timeout=10.0) as client:
-            user_res = client.get(user_url)
+            user_res = client.get(user_url, params={"steamids": steam_id_64})
             user_res.raise_for_status()
             user_data = user_res.json()
 
@@ -227,7 +186,7 @@ def get_player_profile_from_valve(steam_id: str) -> dict:
             else:
                 result["name"] = "Скрытый профиль"
 
-            match_res = client.get(match_url)
+            match_res = client.get(match_url, params={"account_id": steam_id})
             if match_res.status_code == 200:
                 match_data = match_res.json()
                 matches = match_data.get("result", {}).get("matches", [])
@@ -242,33 +201,24 @@ def get_player_profile_from_valve(steam_id: str) -> dict:
 
             return result
 
-    except httpx.HTTPStatusError as e:
-        if e.response.status_code == 401:
-            raise Exception("Невалидный Steam API-ключ! Проверьте его в настройках.")
-        raise Exception(f"Ошибка сервера Valve: {e.response.status_code}")
     except Exception as e:
-        raise Exception(f"Ошибка соединения: {str(e)}")
+        raise Exception(f"Ошибка соединения с Vercel-прокси: {str(e)}")
 
 
 def get_player_profile(account_id: str) -> dict:
     """
-    Единая точка входа для экрана профиля: сначала пробуем STRATZ
-    (свежие данные + винрейт одним запросом), при любой ошибке -
-    прозрачно откатываемся на Steam Web API.
+    Единая точка входа для экрана профиля: сначала пробуем безопасный STRATZ через Vercel,
+    при любой ошибке — прозрачно откатываемся на Steam Web API через Vercel.
     """
     try:
         return get_player_profile_from_stratz(account_id)
     except Exception as stratz_err:
-        print(f"[DEBUG] STRATZ недоступен ({stratz_err}), откат на Steam Web API")
+        print(f"[DEBUG] STRATZ через Vercel недоступен ({stratz_err}), откат на Steam API через Vercel")
         return get_player_profile_from_valve(account_id)
 
 
 # ---------------------------------------------------------------------------
 # Последние матчи
-#
-# У STRATZ список матчей в GraphQL доступен только premium-ключам (см. их
-# официальное объявление), поэтому основной путь - OpenDota (открытый,
-# без premium), а STRATZ пробуем первым просто на случай premium-ключа.
 # ---------------------------------------------------------------------------
 
 _HTTP_HEADERS = {
@@ -305,7 +255,7 @@ def get_recent_matches(account_id: str, limit: int = 5) -> list:
         if matches:
             return matches
     except Exception as e:
-        print(f"[DEBUG] STRATZ matches недоступны: {e}")
+        print(f"[DEBUG] STRATZ matches недоступны через Vercel: {e}")
 
     try:
         return _recent_matches_from_opendota(account_id, limit)
@@ -316,21 +266,19 @@ def get_recent_matches(account_id: str, limit: int = 5) -> list:
 
 
 def _recent_matches_from_stratz(account_id: str, limit: int) -> list:
-    token = get_stratz_api_key()
-    if not token:
-        raise Exception("STRATZ ключ не задан")
-
+    url = f"{VERCEL_PROXY_URL}/api/stratz/graphql"
+    
     payload = {
         "query": _STRATZ_RECENT_MATCHES_QUERY,
         "variables": {"steamAccountId": int(account_id), "take": limit},
     }
 
     with httpx.Client(timeout=10.0) as client:
-        response = client.post(STRATZ_GRAPHQL_URL, headers=_stratz_headers(), json=payload)
+        response = client.post(url, json=payload)
         response.raise_for_status()
         body = response.json()
         if body.get("errors"):
-            raise Exception(f"STRATZ GraphQL ошибка: {body['errors']}")
+            raise Exception(f"STRATZ GraphQL ошибка истории матчей: {body['errors']}")
 
         raw_matches = ((body.get("data") or {}).get("player") or {}).get("matches") or []
         hero_names = _get_hero_names()
