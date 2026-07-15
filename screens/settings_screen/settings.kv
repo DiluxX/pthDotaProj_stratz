@@ -6,7 +6,7 @@
         md_bg_color: app.bg_color
 
         MDTopAppBar:
-            title: "Настройки приложения"
+            title: "Настройки"
             left_action_items: [["arrow-left", lambda x: root.go_back()]]
             elevation: 4
             md_bg_color: app.accent_color
@@ -47,52 +47,6 @@
                         text: "СВЕТЛАЯ"
                         size_hint_x: 1
                         on_release: root.set_theme("light")
-
-                MDLabel:
-                    text: "Steam Web API"
-                    font_style: "H6"
-                    theme_text_color: "Custom"
-                    text_color: app.text_color
-
-                MDLabel:
-                    text: "Нужен для загрузки профиля, если STRATZ недоступен. Получить: steamcommunity.com/dev/apikey"
-                    font_style: "Body2"
-                    theme_text_color: "Custom"
-                    text_color: app.secondary_text_color
-                    size_hint_y: None
-                    height: "40dp"
-
-                MDTextField:
-                    id: steam_key_input
-                    hint_text: "Steam API Key"
-                    mode: "rectangle"
-                    text_color_normal: app.text_color
-
-                MDLabel:
-                    text: "STRATZ API"
-                    font_style: "H6"
-                    theme_text_color: "Custom"
-                    text_color: app.text_color
-
-                MDLabel:
-                    text: "Bearer-токен для свежих данных и винрейта. Получить: stratz.com -> Settings -> API"
-                    font_style: "Body2"
-                    theme_text_color: "Custom"
-                    text_color: app.secondary_text_color
-                    size_hint_y: None
-                    height: "40dp"
-
-                MDTextField:
-                    id: stratz_key_input
-                    hint_text: "STRATZ API Key"
-                    mode: "rectangle"
-                    text_color_normal: app.text_color
-
-                MDRaisedButton:
-                    text: "СОХРАНИТЬ НАСТРОЙКИ"
-                    pos_hint: {"center_x": .5}
-                    md_bg_color: app.accent_color
-                    on_release: root.save_settings()
 
                 Widget:
                     size_hint_y: None
